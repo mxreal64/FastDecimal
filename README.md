@@ -1,4 +1,4 @@
-# FastDecimal — The Fastest Decimal Library Known to Man
+# FastDecimal
 
 A zero-dependency, header-only C++20 decimal arithmetic library engineered for maximum throughput.
 
