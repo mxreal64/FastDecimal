@@ -177,3 +177,8 @@ cmake --build build-final -j$(nproc)
 | Thread safety | values are independent; no shared mutable state |
 | Error handling | NaN / Inf returned — no exceptions |
 | Standard | IEEE 754-2008, ties-to-even rounding |
+
+## Licensing
+
+copyright mxreal64, 2026
+licensed under MIT
