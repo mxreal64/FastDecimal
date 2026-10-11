@@ -4,6 +4,8 @@ A zero-dependency, header-only C++20 decimal arithmetic library engineered for m
 
 ## Benchmark Results (1M ops, `-O3 -march=native`, AVX2, GCC 16)
 
+on an i3-10105 w/ 8gb of ram
+
 ### `fd::Decimal` — full 38-digit precision
 
 | Operation | Time | Throughput |
