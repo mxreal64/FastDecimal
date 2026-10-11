@@ -1,6 +1,15 @@
 # FastDecimal
 
-A zero-dependency, header-only C++20 decimal arithmetic library engineered for maximum throughput, complete with zero-overhead FFI bindings for **Rust**, **Java (Project Panama)**, and **C# (.NET)**.
+[![CI](https://github.com/fastdecimal/fastdecimal/actions/workflows/ci.yml/badge.svg)](https://github.com/mxreal64/FastDecimal/actions/workflows/ci.yml)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg?logo=c%2B%2B)](https://en.cppreference.com/w/cpp/20)
+[![x86_64 AVX2 / AVX-512](https://img.shields.io/badge/SIMD-AVX2%20%2F%20AVX--512-orange.svg)](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions)
+[![ARM64 NEON](https://img.shields.io/badge/SIMD-ARM%20NEON-red.svg?logo=arm)](https://developer.arm.com/architectures/instruction-sets/simd-isas/neon)
+[![Rust](https://img.shields.io/badge/interop-Rust-brown.svg?logo=rust)](interop/rust)
+[![Java Panama](https://img.shields.io/badge/interop-Java%20Panama-ED8B00.svg?logo=openjdk)](interop/java)
+[![C# .NET](https://img.shields.io/badge/interop-C%23%20.NET-512BD4.svg?logo=dotnet)](interop/csharp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A zero-dependency, header-only C++20 decimal arithmetic library engineered for maximum throughput, with native zero-overhead FFI bindings for **Rust**, **Java (Project Panama FFM)**, and **C# (.NET)**. Cross-platform vector acceleration across **x86-64 (AVX2 / AVX-512)** and **ARM64 (NEON / Apple Silicon)**.
 
 ## Benchmark Results (1M ops, `-O3 -march=native`, AVX2, GCC 16)
 
