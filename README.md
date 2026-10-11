@@ -232,9 +232,9 @@ cmake --build build-final -j$(nproc)
 ## Requirements
 
 - C++20 (GCC 10+, Clang 12+)
-- x86-64
-- AVX2 optional (SIMD batch paths, auto-detected via `__AVX2__`)
-- AVX-512F+DQ optional (8-wide paths, auto-detected)
+- x86-64 OR ARM64
+- AVX2 optional (SIMD batch paths, auto-detected via `__AVX2__`) OR ARM NEON
+- AVX-512F+DQ optional (8-wide paths, auto-detected) OR ARM NEON
 ---
 
 ## Properties
