@@ -1,0 +1,80 @@
+name: FastDecimal CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64 (GCC)
+            os: ubuntu-24.04
+            arch: x86_64
+          - name: Linux aarch64 (NEON)
+            os: ubuntu-24.04-arm
+            arch: aarch64
+          - name: macOS ARM64 (Apple Silicon NEON)
+            os: macos-14
+            arch: aarch64
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Java (JDK 22+ for Panama)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '22'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build C++ Library & Tests
+        run: cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+      - name: Run C++ Unit Tests
+        run: ./build/tests
+
+      - name: Run C++ Benchmark
+        run: ./build/bench
+
+      - name: Build C ABI Shared Library
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            c++ -std=c++20 -O3 -fPIC -shared -I include interop/fd_capi.cpp -o build/libfastdecimal.dylib
+            ln -sf libfastdecimal.dylib build/libfastdecimal.so
+          else
+            c++ -std=c++20 -O3 -fPIC -shared -I include interop/fd_capi.cpp -o build/libfastdecimal.so
+          fi
+
+      - name: Test Rust Interop
+        run: |
+          cd interop/rust
+          cargo test -- --nocapture
+
+      - name: Test Java Project Panama Interop
+        run: |
+          cd interop/java
+          javac com/fastdecimal/FastDecimal.java TestPanama.java
+          java --enable-native-access=ALL-UNNAMED -cp . TestPanama
+
+      - name: Test C# Interop
+        run: |
+          cd interop/csharp
+          dotnet run
