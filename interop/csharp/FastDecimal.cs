@@ -17,7 +17,34 @@ namespace FastDecimal
 
     public readonly unsafe struct Decimal : IEquatable<Decimal>, IComparable<Decimal>
     {
-        private const string LibName = "/home/user1/Public/decimallib/build/libfastdecimal.so";
+    static Decimal()
+    {
+        NativeLibrary.SetDllImportResolver(typeof(Decimal).Assembly, (name, assembly, path) =>
+        {
+            if (name == LibName)
+            {
+                string[] candidates = {
+                    "fastdecimal",
+                    "libfastdecimal.so",
+                    "libfastdecimal.dylib",
+                    "build/libfastdecimal.so",
+                    "build/libfastdecimal.dylib",
+                    "../build/libfastdecimal.so",
+                    "../build/libfastdecimal.dylib",
+                    "../../build/libfastdecimal.so",
+                    "../../build/libfastdecimal.dylib"
+                };
+                foreach (var c in candidates)
+                {
+                    if (NativeLibrary.TryLoad(c, out IntPtr handle))
+                        return handle;
+                }
+            }
+            return IntPtr.Zero;
+        });
+    }
+
+        private const string LibName = "fastdecimal";
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void fd_from_i64(long v, out RawDecimal result);

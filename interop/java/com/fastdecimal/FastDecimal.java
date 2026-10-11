@@ -56,9 +56,41 @@ public final class FastDecimal implements Comparable<FastDecimal> {
     private static final MethodHandle MH_IS_NEG;
     private static final MethodHandle MH_IS_FINITE;
 
+    private static SymbolLookup findLibrary() {
+        String prop = System.getProperty("fastdecimal.lib.path");
+        if (prop != null && java.nio.file.Files.exists(Path.of(prop))) {
+            return SymbolLookup.libraryLookup(Path.of(prop), Arena.global());
+        }
+
+        String os = System.getProperty("os.name", "").toLowerCase();
+        String libName = os.contains("mac") || os.contains("darwin") ? "libfastdecimal.dylib"
+                       : os.contains("win") ? "fastdecimal.dll"
+                       : "libfastdecimal.so";
+
+        Path[] candidates = {
+            Path.of(libName),
+            Path.of("build", libName),
+            Path.of("../build", libName),
+            Path.of("../../build", libName),
+            Path.of("/usr/local/lib", libName),
+            Path.of("/usr/lib", libName)
+        };
+
+        for (Path p : candidates) {
+            if (java.nio.file.Files.exists(p)) {
+                return SymbolLookup.libraryLookup(p.toAbsolutePath(), Arena.global());
+            }
+        }
+
+        try {
+            return SymbolLookup.libraryLookup(System.mapLibraryName("fastdecimal"), Arena.global());
+        } catch (Throwable t) {
+            throw new UnsatisfiedLinkError("Cannot locate FastDecimal native library: " + libName);
+        }
+    }
+
     static {
-        String libPath = System.getProperty("fastdecimal.lib.path", "/home/user1/Public/decimallib/build/libfastdecimal.so");
-        LOOKUP = SymbolLookup.libraryLookup(Path.of(libPath), Arena.global());
+        LOOKUP = findLibrary();
 
         MH_FROM_I64 = find("fd_from_i64", FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
         MH_FROM_U64 = find("fd_from_u64", FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS));
