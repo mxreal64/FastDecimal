@@ -1,10 +1,8 @@
-# FastDecimal
+# FastDecimal — The Fastest Decimal Library Known to Man
 
-A zero-dependency, header-only C++20 decimal arithmetic library engineered for maximum throughput.
+A zero-dependency, header-only C++20 decimal arithmetic library engineered for maximum throughput, complete with zero-overhead FFI bindings for **Rust**, **Java (Project Panama)**, and **C# (.NET)**.
 
 ## Benchmark Results (1M ops, `-O3 -march=native`, AVX2, GCC 16)
-
-benched on an i3-10105 w/ 8gb of ram
 
 ### `fd::Decimal` — full 38-digit precision
 
@@ -46,7 +44,7 @@ benched on an i3-10105 w/ 8gb of ram
 
 ## What's inside
 
-### Two complementary types
+### Core Architecture
 
 #### `fd::Decimal` — arbitrary precision (up to 38 significant digits)
 
@@ -90,7 +88,63 @@ Add/sub/compare = **one CPU instruction**. Mul/div use `__int128`.
 
 ---
 
-## Usage
+## Multi-Language Interop (Rust, Java Panama, C#)
+
+FastDecimal exposes a pass-by-reference C ABI shared library (`build/libfastdecimal.so` via `interop/fd_capi.h` / `interop/fd_capi.cpp`) eliminating struct copies and enabling zero-overhead native bindings across major ecosystems.
+
+### 1. Rust (`interop/rust`)
+Idiomatic Rust crate with full operator overloading, `Display`, and `Copy` semantics:
+```rust
+use fastdecimal::Decimal;
+
+let a = Decimal::parse("123.456");
+let b = Decimal::parse("654.321");
+let c = a + b; // "777.777"
+let mult = a * b;
+let div = a / b;
+```
+Run tests:
+```bash
+cd interop/rust && cargo test
+```
+
+### 2. Java (Project Panama — Foreign Function & Memory API) (`interop/java`)
+**Zero JNI.** Uses Java 22+ Foreign Function & Memory (FFM) API downcall method handles with off-heap memory semantics:
+```java
+import com.fastdecimal.FastDecimal;
+
+FastDecimal a = FastDecimal.parse("123.456");
+FastDecimal b = FastDecimal.parse("654.321");
+FastDecimal c = a.add(b); // "777.777"
+FastDecimal mult = a.multiply(b);
+FastDecimal div = a.divide(b);
+```
+Compile and run test:
+```bash
+cd interop/java
+javac com/fastdecimal/FastDecimal.java TestPanama.java
+java --enable-native-access=ALL-UNNAMED -cp . TestPanama
+```
+
+### 3. C# (.NET) (`interop/csharp`)
+Pointer-based P/Invoke binding using `readonly ref struct` / `in` parameters and stack-allocated buffers for zero GC pressure:
+```csharp
+using FastDecimal;
+
+var a = Decimal.Parse("123.456");
+var b = Decimal.Parse("654.321");
+var c = a + b; // "777.777"
+var mult = a * b;
+var div = a / b;
+```
+Run test:
+```bash
+cd interop/csharp && dotnet run
+```
+
+---
+
+## C++ Usage
 
 ```cpp
 #include <decimal.hpp>
@@ -138,13 +192,17 @@ simd::cmp_gt_i64_avx2(a_arr, b_arr, flags, N);
 ## Build
 
 ```bash
+# Build C++ library, tests, and benchmarks
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ./build/tests   # 96/96 pass
 ./build/bench
+
+# Build shared library for interop
+g++ -std=c++20 -O3 -march=native -fPIC -shared -I include interop/fd_capi.cpp -o build/libfastdecimal.so
 ```
 
-### Profile-Guided Optimization (PGO) — free 5–15% speedup
+### Profile-Guided Optimization (PGO)
 
 ```bash
 # Step 1: generate profile
@@ -166,6 +224,7 @@ cmake --build build-final -j$(nproc)
 - x86-64
 - AVX2 optional (SIMD batch paths, auto-detected via `__AVX2__`)
 - AVX-512F+DQ optional (8-wide paths, auto-detected)
+---
 
 ## Properties
 
@@ -176,9 +235,11 @@ cmake --build build-final -j$(nproc)
 | `Decimal` size | 24 bytes (aligned 16) |
 | `FixedDecimal<N>` size | 8 bytes |
 | Heap allocations | **zero** (all arithmetic) |
+| Interop FFI overhead | **zero** (pass-by-reference C ABI) |
 | Thread safety | values are independent; no shared mutable state |
 | Error handling | NaN / Inf returned — no exceptions |
 | Standard | IEEE 754-2008, ties-to-even rounding |
+
 
 ## Licensing
 
