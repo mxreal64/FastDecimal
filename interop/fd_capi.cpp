@@ -4,13 +4,20 @@
 
 static inline fd::Decimal to_cpp(const fd_dec_t* a) {
     fd::Decimal d;
-    std::memcpy(&d, a, sizeof(fd::Decimal));
+    d.sig = ((fd::u128)a->sig_hi << 64) | a->sig_lo;
+    d.exp = a->exp;
+    d.sign = a->sign;
+    d.tag = a->tag;
     return d;
 }
 
 static inline void to_c(const fd::Decimal& d, fd_dec_t* out) {
     std::memset(out, 0, sizeof(fd_dec_t));
-    std::memcpy(out, &d, sizeof(fd::Decimal));
+    out->sig_lo = (uint64_t)d.sig;
+    out->sig_hi = (uint64_t)(d.sig >> 64);
+    out->exp = d.exp;
+    out->sign = d.sign;
+    out->tag = d.tag;
 }
 
 extern "C" {

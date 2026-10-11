@@ -4,8 +4,9 @@
 #include "../include/decimal.hpp"
 #include <cstdio>
 #include <cmath>
-#include <cassert>
 #include <string>
+#include <sstream>
+#include <unordered_map>
 
 using namespace fd;
 
@@ -261,6 +262,79 @@ int main() {
     test_fixed();
     test_special();
     test_simd();
+
+    // ── Streams & Formatting ─────────────────────────────────────────────────
+    {
+        std::stringstream ss;
+        ss << Decimal::from_string("123.456");
+        CHECK_STR(ss.str(), "123.456");
+
+        std::stringstream ss_fix;
+        ss_fix << Money4::from_double(12.34);
+        CHECK_STR(ss_fix.str(), "12.3400");
+    }
+
+    // ── std::hash & Containers ───────────────────────────────────────────────
+    {
+        std::unordered_map<Decimal, int> map;
+        map[Decimal::from_string("10.5")] = 100;
+        map[Decimal::from_string("20.25")] = 200;
+        CHECK(map[Decimal::from_string("10.5")] == 100);
+        CHECK(map[Decimal::from_string("20.25")] == 200);
+
+        std::unordered_map<Money4, std::string> fix_map;
+        fix_map[Money4::from_double(5.5)] = "five point five";
+        CHECK_STR(fix_map[Money4::from_double(5.5)], "five point five");
+    }
+
+    // ── Edge Cases: Malformed Strings & Parser Robustness ───────────────────
+    {
+        CHECK(Decimal::from_string("").is_nan());
+        CHECK(Decimal::from_string("+").is_nan());
+        CHECK(Decimal::from_string("-").is_nan());
+        CHECK(Decimal::from_string(".").is_nan());
+        CHECK(Decimal::from_string("..").is_nan());
+        CHECK(Decimal::from_string("abc").is_nan());
+        CHECK(Decimal::from_string("1e").is_nan());
+        CHECK(Decimal::from_string("1e+").is_nan());
+
+        // Extreme exponents
+        CHECK(Decimal::from_string("1e7000").is_inf());
+        CHECK(Decimal::from_string("1e-7000").is_zero());
+
+        // 38-digit full significand
+        auto max_dig = Decimal::from_string("99999999999999999999999999999999999999");
+        CHECK(max_dig.is_finite());
+        CHECK(!max_dig.is_zero());
+    }
+
+    // ── Arithmetic Scale Alignment Safety ───────────────────────────────────
+    {
+        auto huge = Decimal::from_string("99999999999999999999999999999999999999");
+        auto tiny = Decimal::from_string("0.00000000000000000000000000000000000001");
+        auto sum = huge + tiny;
+        CHECK(sum.is_finite());
+        CHECK(huge > tiny);
+        CHECK(tiny < huge);
+    }
+
+    // ── SIMD unified dispatch ────────────────────────────────────────────────
+    {
+        constexpr int N = 32;
+        i64 a[N], b[N], c[N];
+        i8 cmp[N];
+        for (int i = 0; i < N; ++i) { a[i] = i * 2; b[i] = i; }
+        simd::add_i64_batch(a, b, c, N);
+        for (int i = 0; i < N; ++i) CHECK(c[i] == a[i] + b[i]);
+
+        i64 total = simd::hsum_i64_batch(a, N);
+        i64 expected_total = 0;
+        for (int i = 0; i < N; ++i) expected_total += a[i];
+        CHECK(total == expected_total);
+
+        simd::cmp_gt_i64_batch(a, b, cmp, N);
+        for (int i = 0; i < N; ++i) CHECK(cmp[i] == (a[i] > b[i] ? 1 : 0));
+    }
 
     printf("\n============================================================\n");
     printf("  Results: %d passed, %d failed\n", pass, fail);

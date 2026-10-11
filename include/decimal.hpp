@@ -16,6 +16,17 @@
 #include <span>
 #include <bit>
 #include <cmath>
+#include <ostream>
+#include <functional>
+#if __has_include(<format>)
+#  include <format>
+#endif
+
+// FastDecimal Version
+#define FASTDECIMAL_VERSION_MAJOR 1
+#define FASTDECIMAL_VERSION_MINOR 1
+#define FASTDECIMAL_VERSION_PATCH 0
+#define FASTDECIMAL_VERSION_STRING "1.1.0"
 
 // Architecture detection & SIMD intrinsics
 #if defined(__x86_64__) || defined(_M_X64)
@@ -47,8 +58,13 @@
 
 namespace fd {
 
+#if defined(__GNUC__) || defined(__clang__)
+__extension__ typedef __int128 i128;
+__extension__ typedef unsigned __int128 u128;
+#else
 using i128 = __int128;
 using u128 = unsigned __int128;
+#endif
 using i64  = std::int64_t;
 using u64  = std::uint64_t;
 using i32  = std::int32_t;
@@ -246,12 +262,29 @@ struct alignas(16) Decimal {
         if (a.exp == b.exp) return;
         if (a.exp > b.exp) {
             int sh = a.exp - b.exp;
-            if (sh > MAX_DIGITS) { b.sig = 0; return; }
-            a.sig *= POW10.v[sh]; a.exp = b.exp;
+            if (sh > MAX_DIGITS) { b.sig = 0; b.exp = a.exp; return; }
+            u128 max_allowed = SIG_MAX / POW10.v[sh];
+            if (a.sig <= max_allowed) {
+                a.sig *= POW10.v[sh];
+                a.exp = b.exp;
+            } else {
+                // a.sig would overflow, scale b down instead
+                u128 p = POW10.v[sh];
+                b.sig = (b.sig + p / 2) / p;
+                b.exp = a.exp;
+            }
         } else {
             int sh = b.exp - a.exp;
-            if (sh > MAX_DIGITS) { a.sig = 0; return; }
-            b.sig *= POW10.v[sh]; b.exp = a.exp;
+            if (sh > MAX_DIGITS) { a.sig = 0; a.exp = b.exp; return; }
+            u128 max_allowed = SIG_MAX / POW10.v[sh];
+            if (b.sig <= max_allowed) {
+                b.sig *= POW10.v[sh];
+                b.exp = a.exp;
+            } else {
+                u128 p = POW10.v[sh];
+                a.sig = (a.sig + p / 2) / p;
+                a.exp = b.exp;
+            }
         }
     }
 
@@ -260,13 +293,23 @@ struct alignas(16) Decimal {
         int diff = (int)a.exp - (int)b.exp;
         if (diff > 0) {
             if (diff > MAX_DIGITS) return a.sig ? 1 : (b.sig ? -1 : 0);
-            u128 as = a.sig * POW10.v[diff];
-            return (as > b.sig) - (as < b.sig);
+            u128 max_allowed = SIG_MAX / POW10.v[diff];
+            if (a.sig <= max_allowed) {
+                u128 as = a.sig * POW10.v[diff];
+                return (as > b.sig) - (as < b.sig);
+            }
+            // a is clearly larger than any b <= SIG_MAX
+            return 1;
         }
         diff = -diff;
         if (diff > MAX_DIGITS) return b.sig ? -1 : (a.sig ? 1 : 0);
-        u128 bs = b.sig * POW10.v[diff];
-        return (a.sig > bs) - (a.sig < bs);
+        u128 max_allowed = SIG_MAX / POW10.v[diff];
+        if (b.sig <= max_allowed) {
+            u128 bs = b.sig * POW10.v[diff];
+            return (a.sig > bs) - (a.sig < bs);
+        }
+        // b is clearly larger than any a <= SIG_MAX
+        return -1;
     }
 
     FD_ALWAYS_INLINE friend Decimal operator+(Decimal a, Decimal b) noexcept { return add(a, b); }
@@ -579,10 +622,13 @@ inline Decimal Decimal::from_chars(const char* first, const char* last) noexcept
     const char* p = first;
     i8 sign = 0;
     if (*p == '-') { sign = 1; ++p; } else if (*p == '+') { ++p; }
+    if (p == last) return nan();
+
     if (last - p >= 3 && (p[0] | 32) == 'n' && (p[1] | 32) == 'a' && (p[2] | 32) == 'n') return nan();
     if (last - p >= 3 && (p[0] | 32) == 'i' && (p[1] | 32) == 'n' && (p[2] | 32) == 'f') return inf(sign);
 
-    u128 sig = 0; i16 exp_adj = 0; int ndot = 0, ndig = 0; bool dot = false;
+    u128 sig = 0; i64 exp_adj = 0; int ndot = 0, ndig = 0; bool dot = false;
+    bool found_digits = false;
 
     while (p < last) {
         // Fast 8-byte SWAR chunk parser
@@ -602,12 +648,14 @@ inline Decimal Decimal::from_chars(const char* first, const char* last) noexcept
                 sig = sig * 100000000ULL + chunk;
                 ndig += 8;
                 p += 8;
+                found_digits = true;
                 continue;
             }
         }
 
         unsigned c = (unsigned char)*p - '0';
         if (c <= 9) {
+            found_digits = true;
             if (ndig < MAX_DIGITS) {
                 sig = sig * 10 + c; ndig++;
                 if (dot) ndot++;
@@ -617,17 +665,30 @@ inline Decimal Decimal::from_chars(const char* first, const char* last) noexcept
             ++p;
         } else if ((unsigned char)*p == '.' && !dot) {
             dot = true; ++p;
-        } else if (((unsigned char)*p == 'e' || (unsigned char)*p == 'E') && p < last - 1) {
+        } else if ((unsigned char)*p == 'e' || (unsigned char)*p == 'E') {
             ++p; int esign = 1;
-            if (*p == '+') { ++p; } else if (*p == '-') { esign = -1; ++p; }
-            int ev = 0;
-            while (p < last && (unsigned char)(*p - '0') <= 9) { ev = ev * 10 + (*p - '0'); ++p; }
-            exp_adj += (i16)(esign * ev); break;
+            if (p < last && *p == '+') { ++p; } else if (p < last && *p == '-') { esign = -1; ++p; }
+            i64 ev = 0;
+            bool found_exp_dig = false;
+            while (p < last && (unsigned char)(*p - '0') <= 9) {
+                found_exp_dig = true;
+                if (ev < 100000) ev = ev * 10 + (*p - '0');
+                ++p;
+            }
+            if (!found_exp_dig) return nan();
+            exp_adj += (esign * ev);
+            break;
         } else break;
     }
-    i16 fexp = (i16)(exp_adj - ndot);
+
+    if (!found_digits) return nan();
+
+    i64 fexp = exp_adj - ndot;
+    if (fexp > SCALE_MAX) return inf(sign);
+    if (fexp < SCALE_MIN) return raw(0, 0, sign);
+
     while (sig != 0 && (sig % 10) == 0 && fexp < SCALE_MAX) { sig /= 10; fexp++; }
-    return raw(sig, fexp, sign);
+    return raw(sig, (i16)fexp, sign);
 }
 
 // ===========================================================================
@@ -728,10 +789,12 @@ FD_ALWAYS_INLINE void add_i64_avx512(const i64* FD_RESTRICT a, const i64* FD_RES
     std::size_t i = 0;
     for (; i + 8 <= n; i += 8) _mm512_storeu_si512(dst + i, _mm512_add_epi64(_mm512_loadu_si512(a + i), _mm512_loadu_si512(b + i)));
 #ifdef FD_HAS_AVX2
-    add_i64_avx2(a + i, b + i, dst + i, n - i);
-#else
-    for (; i < n; ++i) dst[i] = a[i] + b[i];
+    for (; i + 4 <= n; i += 4) {
+        _mm256_storeu_si256((__m256i*)(dst + i),
+            _mm256_add_epi64(_mm256_loadu_si256((__m256i*)(a + i)), _mm256_loadu_si256((__m256i*)(b + i))));
+    }
 #endif
+    for (; i < n; ++i) dst[i] = a[i] + b[i];
 }
 FD_ALWAYS_INLINE i64 hsum_i64_avx512(const i64* FD_RESTRICT a, std::size_t n) noexcept {
     __m512i acc = _mm512_setzero_si512(); std::size_t i = 0;
@@ -765,6 +828,16 @@ FD_ALWAYS_INLINE i64 hsum_i64_batch(const i64* FD_RESTRICT a, std::size_t n) noe
     i64 r = 0;
     for (std::size_t i = 0; i < n; ++i) r += a[i];
     return r;
+#endif
+}
+
+FD_ALWAYS_INLINE void cmp_gt_i64_batch(const i64* FD_RESTRICT a, const i64* FD_RESTRICT b, i8* FD_RESTRICT dst, std::size_t n) noexcept {
+#if defined(FD_HAS_AVX2)
+    cmp_gt_i64_avx2(a, b, dst, n);
+#elif defined(FD_HAS_NEON)
+    cmp_gt_i64_neon(a, b, dst, n);
+#else
+    for (std::size_t i = 0; i < n; ++i) dst[i] = (a[i] > b[i]) ? 1 : 0;
 #endif
 }
 
@@ -815,7 +888,15 @@ struct FixedDecimal {
             return std::string(buf, p);
         }
     }
+
+    friend std::ostream& operator<<(std::ostream& os, const FixedDecimal& fd) {
+        return os << fd.to_string();
+    }
 };
+
+inline std::ostream& operator<<(std::ostream& os, const Decimal& d) {
+    return os << d.to_string();
+}
 
 using Money2   = FixedDecimal<2>;
 using Money4   = FixedDecimal<4>;
@@ -824,3 +905,43 @@ using Decimal6 = FixedDecimal<6>;
 using Decimal9 = FixedDecimal<9>;
 
 } // namespace fd
+
+// ===========================================================================
+// std::hash Specializations
+// ===========================================================================
+template<>
+struct std::hash<fd::Decimal> {
+    std::size_t operator()(const fd::Decimal& d) const noexcept {
+        if (d.is_nan()) return 0x7fc00000;
+        if (d.is_zero()) return 0;
+        std::size_t h = std::hash<uint64_t>{}((uint64_t)d.sig);
+        h ^= std::hash<uint64_t>{}((uint64_t)(d.sig >> 64)) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<int16_t>{}(d.exp) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<int8_t>{}(d.sign) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<uint8_t>{}(d.tag) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+template<int Scale>
+struct std::hash<fd::FixedDecimal<Scale>> {
+    std::size_t operator()(const fd::FixedDecimal<Scale>& fd) const noexcept {
+        return std::hash<int64_t>{}(fd.raw_val);
+    }
+};
+
+#if __has_include(<format>)
+template<>
+struct std::formatter<fd::Decimal> : std::formatter<std::string> {
+    auto format(const fd::Decimal& d, std::format_context& ctx) const {
+        return std::formatter<std::string>::format(d.to_string(), ctx);
+    }
+};
+
+template<int Scale>
+struct std::formatter<fd::FixedDecimal<Scale>> : std::formatter<std::string> {
+    auto format(const fd::FixedDecimal<Scale>& fd, std::format_context& ctx) const {
+        return std::formatter<std::string>::format(fd.to_string(), ctx);
+    }
+};
+#endif
