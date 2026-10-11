@@ -4,31 +4,23 @@ project(decimallib VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# ── Detect CPU and set maximum vectorization flags ──────────────────────────
+# Optimization flags with compiler detection
+set(BASE_FLAGS "-O3" "-funroll-loops")
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    list(APPEND BASE_FLAGS "-ftree-vectorize" "-fno-plt" "-flto=auto")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+    list(APPEND BASE_FLAGS "-fvectorize" "-flto=thin")
+endif()
+
+# Architecture-specific flags (-march=native only where supported, avoid breaking AppleClang / cross)
 include(CheckCXXCompilerFlag)
-
-# Aggressive optimization
-set(BASE_FLAGS "-O3 -march=native -mtune=native -funroll-loops -ffast-math -fno-rounding-math")
-set(BASE_FLAGS "${BASE_FLAGS} -fomit-frame-pointer -fstrict-aliasing")
-set(BASE_FLAGS "${BASE_FLAGS} -ftree-vectorize")
-set(BASE_FLAGS "${BASE_FLAGS} -fno-plt -fno-semantic-interposition")
-# LTO
-set(BASE_FLAGS "${BASE_FLAGS} -flto=auto -fuse-linker-plugin")
-
-# Profile-guided optimization hint (optional, users can enable)
-option(ENABLE_PGO_GENERATE "Build with PGO instrumentation" OFF)
-option(ENABLE_PGO_USE      "Build with PGO data"            OFF)
-if(ENABLE_PGO_GENERATE)
-    set(BASE_FLAGS "${BASE_FLAGS} -fprofile-generate")
-endif()
-if(ENABLE_PGO_USE)
-    set(BASE_FLAGS "${BASE_FLAGS} -fprofile-use -fprofile-correction")
+check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    list(APPEND BASE_FLAGS "-march=native")
 endif()
 
-set(CMAKE_CXX_FLAGS_RELEASE "${BASE_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-
-# ── Library (header-only, but provide a compiled companion) ─────────────────
+# Header-only interface
 add_library(decimallib INTERFACE)
 target_include_directories(decimallib INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -36,24 +28,21 @@ target_include_directories(decimallib INTERFACE
 )
 target_compile_features(decimallib INTERFACE cxx_std_20)
 
-# ── Benchmarks ───────────────────────────────────────────────────────────────
+# C ABI Shared library (always built by cmake so rust/java/csharp find it)
+add_library(fastdecimal SHARED interop/fd_capi.cpp)
+target_link_libraries(fastdecimal PRIVATE decimallib)
+target_compile_options(fastdecimal PRIVATE ${BASE_FLAGS} -fPIC)
+set_target_properties(fastdecimal PROPERTIES
+    OUTPUT_NAME "fastdecimal"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
+
+# Benchmarks
 add_executable(bench bench/bench.cpp)
 target_link_libraries(bench PRIVATE decimallib)
-target_compile_options(bench PRIVATE
-    -O3 -march=native -mtune=native -funroll-loops -ffast-math
-    -fomit-frame-pointer -fno-plt
-)
+target_compile_options(bench PRIVATE ${BASE_FLAGS})
 
-# ── Tests ────────────────────────────────────────────────────────────────────
+# Tests
 add_executable(tests tests/tests.cpp)
 target_link_libraries(tests PRIVATE decimallib)
-target_compile_options(tests PRIVATE -O2 -march=native)
-
-# ── Install ──────────────────────────────────────────────────────────────────
-install(DIRECTORY include/ DESTINATION include)
-install(TARGETS decimallib EXPORT decimallibTargets)
-install(EXPORT decimallibTargets
-    FILE decimallibTargets.cmake
-    NAMESPACE fd::
-    DESTINATION lib/cmake/decimallib
-)
+target_compile_options(tests PRIVATE ${BASE_FLAGS})

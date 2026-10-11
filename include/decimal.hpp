@@ -1,3 +1,6 @@
+// =============================================================================
+//  decimal.hpp — FastDecimal: Cross-Platform x86-64 (AVX2/AVX-512) & ARM64 (NEON)
+// =============================================================================
 #pragma once
 
 #include <cstdint>
@@ -58,9 +61,7 @@ using u8   = std::uint8_t;
 static constexpr int  MAX_DIGITS = 38;
 static constexpr int  SCALE_MIN  = -6143;
 static constexpr int  SCALE_MAX  =  6144;
-static constexpr u128 SIG_MAX =
-    (u128)99999999999999999ULL * 1000000000000000000ULL * 100ULL
-    + 99999999999999999ULL;
+static constexpr u128 SIG_MAX = ((u128)5421010862427522170ULL << 64) | 687399551400673279ULL;
 
 // Two-digit LUT for serialization
 alignas(64) inline constexpr char DIGIT_PAIRS[201] =
@@ -370,8 +371,7 @@ FD_ALWAYS_INLINE Decimal Decimal::mul(const Decimal& a, const Decimal& b) noexce
     if (hi == 0) {
         while (FD_UNLIKELY(lo > SIG_MAX)) { lo = (lo + 5) / 10; extra++; }
     } else {
-        constexpr u128 INV10 =
-            (u128)34028236692093846346ULL * 10000000000000000000ULL + 337460743176821145ULL;
+        constexpr u128 INV10 = ((u128)1844674407370955161ULL << 64) | 11068046444225730969ULL;
         while (hi > 0) {
             u64 c = (u64)(hi % 10); hi /= 10;
             u128 ln = lo / 10 + (u128)c * INV10;

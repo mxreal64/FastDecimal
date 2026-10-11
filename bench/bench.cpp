@@ -59,7 +59,9 @@ static std::vector<Money4> make_money4(int n) {
 // ── Main ─────────────────────────────────────────────────────────────────────
 int main() {
     constexpr int N    = 1'000'000;
+    #if defined(FD_HAS_AVX2) || defined(FD_HAS_AVX512) || defined(FD_HAS_NEON)
     constexpr int BULK = 1'000'000;
+#endif
 
     printf("============================================================\n");
     printf("  FastDecimal Benchmark  (N=%d ops each)\n", N);
@@ -220,6 +222,28 @@ int main() {
         u64 t1 = now_ns();
         printf("  %-40s  %7.2f ns/elem\n", "AVX-512 hsum i64[1M]",
                (double)(t1-t0)/BULK);
+        sink ^= (u64)s;
+    }
+#endif
+
+
+#ifdef FD_HAS_NEON
+    printf("\n[SIMD Batch (ARM NEON) — i64 arrays, N=%d]\n", BULK);
+    std::vector<i64> va_neon(BULK), vb_neon(BULK), vc_neon(BULK);
+    std::mt19937_64 rng_neon(1234);
+    for (int i = 0; i < BULK; ++i) { va_neon[i] = rng_neon(); vb_neon[i] = rng_neon() % 1000 + 1; }
+    {
+        u64 t0 = now_ns();
+        simd::add_i64_neon(va_neon.data(), vb_neon.data(), vc_neon.data(), BULK);
+        u64 t1 = now_ns();
+        printf("  %-40s  %7.2f ns/elem\n", "ARM NEON add i64[1M]", (double)(t1-t0)/BULK);
+        sink ^= (u64)vc_neon[0];
+    }
+    {
+        u64 t0 = now_ns();
+        i64 s = simd::hsum_i64_neon(va_neon.data(), BULK);
+        u64 t1 = now_ns();
+        printf("  %-40s  %7.2f ns/elem\n", "ARM NEON hsum i64[1M]", (double)(t1-t0)/BULK);
         sink ^= (u64)s;
     }
 #endif

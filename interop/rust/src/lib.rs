@@ -63,6 +63,7 @@ extern "C" {
     fn fd_is_finite(a: *const RawDecimal) -> libc::c_int;
 }
 
+#[allow(non_camel_case_types)]
 mod libc {
     pub type c_char = std::os::raw::c_char;
     pub type c_int = std::os::raw::c_int;
