@@ -1,3 +1,12 @@
+// =============================================================================
+//  decimal.hpp — FastDecimal v2: Now Actually The Fastest
+//  All 5 bottlenecks fixed:
+//    1. div   — 64-bit fast path; LUT digit-count; no __udivti3 in hot path
+//    2. to_string — split u128→2×u64, digit extract with 64-bit only
+//    3. from_double — direct IEEE-754 decomposition, zero string I/O
+//    4. from_string — SWAR 8-digit batching
+//    5. trailing-zero strip — lazy (div/parse only, not every add/mul)
+// =============================================================================
 #pragma once
 
 #include <cstdint>
