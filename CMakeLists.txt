@@ -35,6 +35,9 @@ target_compile_options(fastdecimal PRIVATE ${BASE_FLAGS} -fPIC)
 set_target_properties(fastdecimal PROPERTIES
     OUTPUT_NAME "fastdecimal"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_NAME_DIR "@rpath"
+    MACOSX_RPATH TRUE
 )
 
 # Benchmarks
