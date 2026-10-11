@@ -1,6 +1,7 @@
 # FastDecimal
 
-[![FastDecimal CI](https://github.com/mxreal64/FastDecimal/actions/workflows/ci.yml/badge.svg)](https://github.com/mxreal64/FastDecimal/actions/workflows/ci.yml)[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg?logo=c%2B%2B)](https://en.cppreference.com/w/cpp/20)
+[![FastDecimal CI](https://github.com/mxreal64/FastDecimal/actions/workflows/ci.yml/badge.svg)](https://github.com/mxreal64/FastDecimal/actions/workflows/ci.yml)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg?logo=c%2B%2B)](https://en.cppreference.com/w/cpp/20)
 [![x86_64 AVX2 / AVX-512](https://img.shields.io/badge/SIMD-AVX2%20%2F%20AVX--512-orange.svg)](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions)
 [![ARM64 NEON](https://img.shields.io/badge/SIMD-ARM%20NEON-red.svg?logo=arm)](https://developer.arm.com/architectures/instruction-sets/simd-isas/neon)
 [![Rust](https://img.shields.io/badge/interop-Rust-brown.svg?logo=rust)](interop/rust)
