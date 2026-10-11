@@ -25,13 +25,17 @@ fn main() {
     }
 
     let lib_dir = found_dir.unwrap_or_else(|| manifest_dir.join("../../build"));
+    let abs_lib_dir = lib_dir.canonicalize().unwrap_or(lib_dir);
 
-    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+    println!("cargo:rustc-link-search=native={}", abs_lib_dir.display());
     println!("cargo:rustc-link-lib=dylib=fastdecimal");
 
-    // rpath for Linux & macOS dyld
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
-    // Also add loader_path for macOS dyld
+    // Pass rpaths: absolute build directory + relative rpaths
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", abs_lib_dir.display());
+    println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path");
     println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path/../../build");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path/../../../build");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path");
     println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/../../build");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/../../../build");
 }
